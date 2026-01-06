@@ -31,4 +31,9 @@ public class DisabledUpstreamClient : IUpstreamClient
     {
         return Task.FromResult<Stream>(null);
     }
+
+    public Task<PackageLicenseInfo> GetLicenseInfoOrNullAsync(string id, NuGetVersion version, CancellationToken cancellationToken)
+    {
+        return Task.FromResult<PackageLicenseInfo>(null);
+    }
 }

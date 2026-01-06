@@ -98,6 +98,7 @@ public static partial class DependencyInjectionExtensions
         services.TryAddTransient<IPackageIndexingService, PackageIndexingService>();
         services.TryAddTransient<IPackageMetadataService, DefaultPackageMetadataService>();
         services.TryAddTransient<IPackageService, PackageService>();
+        services.TryAddTransient<ILicenseFilterService, LicenseFilterService>();
         services.TryAddTransient<IPackageStorageService, PackageStorageService>();
         services.TryAddTransient<IServiceIndexService, BaGetterServiceIndex>();
         services.TryAddTransient<ISymbolIndexingService, SymbolIndexingService>();

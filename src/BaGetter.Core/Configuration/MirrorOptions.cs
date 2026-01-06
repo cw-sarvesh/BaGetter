@@ -28,6 +28,20 @@ public class MirrorOptions : IValidatableObject
     [Range(0, int.MaxValue)]
     public int PackageDownloadTimeoutSeconds { get; set; } = 600;
 
+    /// <summary>
+    /// List of blocked license expressions (e.g., "AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later").
+    /// Packages with these licenses will not be downloaded from upstream.
+    /// License expressions are case-insensitive and support SPDX license identifiers.
+    /// </summary>
+    public List<string> BlockedLicenses { get; set; } = new();
+
+    /// <summary>
+    /// List of blocked license URL patterns (e.g., "*agpl*", "*gpl*").
+    /// Packages with license URLs matching these patterns will not be downloaded from upstream.
+    /// Patterns support wildcards (*) and are case-insensitive.
+    /// </summary>
+    public List<string> BlockedLicenseUrlPatterns { get; set; } = new();
+
     public MirrorAuthenticationOptions Authentication { get; set; }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)

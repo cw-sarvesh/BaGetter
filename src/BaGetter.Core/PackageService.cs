@@ -13,17 +13,20 @@ public class PackageService : IPackageService
     private readonly IPackageDatabase _db;
     private readonly IUpstreamClient _upstream;
     private readonly IPackageIndexingService _indexer;
+    private readonly ILicenseFilterService _licenseFilter;
     private readonly ILogger<PackageService> _logger;
 
     public PackageService(
         IPackageDatabase db,
         IUpstreamClient upstream,
         IPackageIndexingService indexer,
+        ILicenseFilterService licenseFilter,
         ILogger<PackageService> logger)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _upstream = upstream ?? throw new ArgumentNullException(nameof(upstream));
         _indexer = indexer ?? throw new ArgumentNullException(nameof(indexer));
+        _licenseFilter = licenseFilter ?? throw new ArgumentNullException(nameof(licenseFilter));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -107,6 +110,16 @@ public class PackageService : IPackageService
 
         try
         {
+            // Check if the package's license is blocked before downloading
+            if (await _licenseFilter.IsLicenseBlockedAsync(id, version, cancellationToken))
+            {
+                _logger.LogWarning(
+                    "Package {PackageId} {PackageVersion} has a blocked license and will not be downloaded from upstream.",
+                    id,
+                    version);
+                return false;
+            }
+
             using var packageStream = await _upstream.DownloadPackageOrNullAsync(id, version, cancellationToken);
             if (packageStream == null)
             {

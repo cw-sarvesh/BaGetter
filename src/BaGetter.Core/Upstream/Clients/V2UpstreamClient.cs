@@ -145,6 +145,31 @@ public class V2UpstreamClient : IUpstreamClient, IDisposable
         }
     }
 
+    public async Task<PackageLicenseInfo> GetLicenseInfoOrNullAsync(string id, NuGetVersion version, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var packages = await ListPackagesAsync(id, cancellationToken);
+            var package = packages.FirstOrDefault(p => p.Version == version);
+
+            if (package == null)
+            {
+                return null;
+            }
+
+            return new PackageLicenseInfo
+            {
+                LicenseUrl = package.LicenseUrl?.AbsoluteUri,
+                LicenseExpression = null // V2 feeds typically don't have license expressions
+            };
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Failed to get license info for package {PackageId} {PackageVersion}", id, version);
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         _cache.Dispose();
