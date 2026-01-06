@@ -111,13 +111,15 @@ public class PackageService : IPackageService
         try
         {
             // Check if the package's license is blocked before downloading
-            if (await _licenseFilter.IsLicenseBlockedAsync(id, version, cancellationToken))
+            var blockedReason = await _licenseFilter.GetBlockedReasonOrNullAsync(id, version, cancellationToken);
+            if (blockedReason != null)
             {
                 _logger.LogWarning(
-                    "Package {PackageId} {PackageVersion} has a blocked license and will not be downloaded from upstream.",
+                    "Package {PackageId} {PackageVersion} has a blocked license and will not be downloaded from upstream. Reason: {Reason}",
                     id,
-                    version);
-                return false;
+                    version,
+                    blockedReason);
+                throw new Exceptions.PackageLicenseBlockedException(id, version, blockedReason);
             }
 
             using var packageStream = await _upstream.DownloadPackageOrNullAsync(id, version, cancellationToken);
@@ -144,6 +146,11 @@ public class PackageService : IPackageService
                 result);
 
             return result == PackageIndexingResult.Success;
+        }
+        catch (Exceptions.PackageLicenseBlockedException)
+        {
+            // Re-throw license blocked exceptions so they can be handled properly
+            throw;
         }
         catch (Exception e)
         {

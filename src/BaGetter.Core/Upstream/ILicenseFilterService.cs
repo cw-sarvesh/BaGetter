@@ -19,5 +19,16 @@ public interface ILicenseFilterService
     /// True if the package's license is blocked and should not be downloaded, false otherwise.
     /// </returns>
     Task<bool> IsLicenseBlockedAsync(string packageId, NuGetVersion version, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets the reason why a package's license is blocked, or null if it's not blocked.
+    /// </summary>
+    /// <param name="packageId">The package ID.</param>
+    /// <param name="version">The package version.</param>
+    /// <param name="cancellationToken">A token to cancel the task.</param>
+    /// <returns>
+    /// A description of why the package is blocked, or null if it's not blocked.
+    /// </returns>
+    Task<string> GetBlockedReasonOrNullAsync(string packageId, NuGetVersion version, CancellationToken cancellationToken);
 }
 

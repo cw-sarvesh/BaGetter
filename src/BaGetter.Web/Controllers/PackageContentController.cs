@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BaGetter.Authentication;
 using BaGetter.Core;
+using BaGetter.Core.Exceptions;
 using BaGetter.Protocol.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,13 +30,26 @@ public class PackageContentController : Controller
 
     public async Task<ActionResult<PackageVersionsResponse>> GetPackageVersionsAsync(string id, CancellationToken cancellationToken)
     {
-        var versions = await _content.GetPackageVersionsOrNullAsync(id, cancellationToken);
-        if (versions == null)
+        try
         {
-            return NotFound();
-        }
+            var versions = await _content.GetPackageVersionsOrNullAsync(id, cancellationToken);
+            if (versions == null)
+            {
+                return NotFound();
+            }
 
-        return versions;
+            return versions;
+        }
+        catch (PackageLicenseBlockedException ex)
+        {
+            return StatusCode(403, new {
+                error = "Package blocked by organization due to license issue",
+                message = ex.Message,
+                packageId = ex.PackageId,
+                packageVersion = ex.PackageVersion.ToString(),
+                reason = ex.Reason
+            });
+        }
     }
 
     /// <summary>
@@ -52,13 +66,26 @@ public class PackageContentController : Controller
             return NotFound();
         }
 
-        var packageStream = await _content.GetPackageContentStreamOrNullAsync(id, nugetVersion, cancellationToken);
-        if (packageStream == null)
+        try
         {
-            return NotFound();
-        }
+            var packageStream = await _content.GetPackageContentStreamOrNullAsync(id, nugetVersion, cancellationToken);
+            if (packageStream == null)
+            {
+                return NotFound();
+            }
 
-        return File(packageStream, "application/octet-stream");
+            return File(packageStream, "application/octet-stream");
+        }
+        catch (PackageLicenseBlockedException ex)
+        {
+            return StatusCode(403, new {
+                error = "Package blocked by organization due to license issue",
+                message = ex.Message,
+                packageId = ex.PackageId,
+                packageVersion = ex.PackageVersion.ToString(),
+                reason = ex.Reason
+            });
+        }
     }
 
     public async Task<IActionResult> DownloadNuspecAsync(string id, string version, CancellationToken cancellationToken)
@@ -68,13 +95,26 @@ public class PackageContentController : Controller
             return NotFound();
         }
 
-        var nuspecStream = await _content.GetPackageManifestStreamOrNullAsync(id, nugetVersion, cancellationToken);
-        if (nuspecStream == null)
+        try
         {
-            return NotFound();
-        }
+            var nuspecStream = await _content.GetPackageManifestStreamOrNullAsync(id, nugetVersion, cancellationToken);
+            if (nuspecStream == null)
+            {
+                return NotFound();
+            }
 
-        return File(nuspecStream, "text/xml");
+            return File(nuspecStream, "text/xml");
+        }
+        catch (PackageLicenseBlockedException ex)
+        {
+            return StatusCode(403, new {
+                error = "Package blocked by organization due to license issue",
+                message = ex.Message,
+                packageId = ex.PackageId,
+                packageVersion = ex.PackageVersion.ToString(),
+                reason = ex.Reason
+            });
+        }
     }
 
     public async Task<IActionResult> DownloadReadmeAsync(string id, string version, CancellationToken cancellationToken)

@@ -112,6 +112,73 @@ public class LicenseFilterService : ILicenseFilterService
         }
     }
 
+    public async Task<string> GetBlockedReasonOrNullAsync(string packageId, NuGetVersion version, CancellationToken cancellationToken)
+    {
+        // If no license filters are configured, allow all packages
+        if ((_options.BlockedLicenses == null || _options.BlockedLicenses.Count == 0) &&
+            (_options.BlockedLicenseUrlPatterns == null || _options.BlockedLicenseUrlPatterns.Count == 0))
+        {
+            return null;
+        }
+
+        try
+        {
+            // Get license information for the specific version
+            var licenseInfo = await _upstream.GetLicenseInfoOrNullAsync(packageId, version, cancellationToken);
+
+            if (licenseInfo == null)
+            {
+                return null;
+            }
+
+            // Check blocked license expressions
+            if (_options.BlockedLicenses != null && _options.BlockedLicenses.Count > 0)
+            {
+                if (!string.IsNullOrEmpty(licenseInfo.LicenseExpression))
+                {
+                    var licenseExpression = licenseInfo.LicenseExpression.ToLowerInvariant();
+                    foreach (var blockedLicense in _options.BlockedLicenses)
+                    {
+                        var blockedLower = blockedLicense.ToLowerInvariant();
+
+                        // Check if the license expression contains the blocked license
+                        if (licenseExpression.Contains(blockedLower))
+                        {
+                            return $"License expression '{licenseInfo.LicenseExpression}' contains blocked license '{blockedLicense}'";
+                        }
+                    }
+                }
+            }
+
+            // Check blocked license URL patterns
+            if (_options.BlockedLicenseUrlPatterns != null && _options.BlockedLicenseUrlPatterns.Count > 0)
+            {
+                if (!string.IsNullOrEmpty(licenseInfo.LicenseUrl))
+                {
+                    foreach (var pattern in _options.BlockedLicenseUrlPatterns)
+                    {
+                        if (MatchesPattern(licenseInfo.LicenseUrl, pattern))
+                        {
+                            return $"License URL '{licenseInfo.LicenseUrl}' matches blocked pattern '{pattern}'";
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+        catch (Exception e)
+        {
+            // If license check fails, don't block (fail open)
+            _logger.LogError(
+                e,
+                "Error checking license for package {PackageId} {PackageVersion}",
+                packageId,
+                version);
+            return null;
+        }
+    }
+
     private static bool MatchesPattern(string text, string pattern)
     {
         if (string.IsNullOrEmpty(pattern))

@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BaGetter.Authentication;
 using BaGetter.Core;
+using BaGetter.Core.Exceptions;
 using BaGetter.Protocol.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -47,12 +48,25 @@ public class PackageMetadataController : Controller
             return NotFound();
         }
 
-        var leaf = await _metadata.GetRegistrationLeafOrNullAsync(id, nugetVersion, cancellationToken);
-        if (leaf == null)
+        try
         {
-            return NotFound();
-        }
+            var leaf = await _metadata.GetRegistrationLeafOrNullAsync(id, nugetVersion, cancellationToken);
+            if (leaf == null)
+            {
+                return NotFound();
+            }
 
-        return leaf;
+            return leaf;
+        }
+        catch (PackageLicenseBlockedException ex)
+        {
+            return StatusCode(403, new {
+                error = "Package blocked by organization due to license issue",
+                message = ex.Message,
+                packageId = ex.PackageId,
+                packageVersion = ex.PackageVersion.ToString(),
+                reason = ex.Reason
+            });
+        }
     }
 }
