@@ -1,3 +1,4 @@
+using System;
 using NuGet.Versioning;
 
 namespace BaGetter.Core.Exceptions;
