@@ -60,6 +60,8 @@ public class PackageMetadataController : Controller
         }
         catch (PackageLicenseBlockedException ex)
         {
+            Response.Headers.Add("X-Package-Block-Reason", ex.Reason);
+            Response.Headers.Add("X-Package-Block-Message", ex.Message);
             return StatusCode(403, new {
                 error = "Package blocked by organization due to license issue",
                 message = ex.Message,
