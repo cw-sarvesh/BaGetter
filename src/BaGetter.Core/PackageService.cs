@@ -13,17 +13,20 @@ public class PackageService : IPackageService
     private readonly IPackageDatabase _db;
     private readonly IUpstreamClient _upstream;
     private readonly IPackageIndexingService _indexer;
+    private readonly ILicenseFilterService _licenseFilter;
     private readonly ILogger<PackageService> _logger;
 
     public PackageService(
         IPackageDatabase db,
         IUpstreamClient upstream,
         IPackageIndexingService indexer,
+        ILicenseFilterService licenseFilter,
         ILogger<PackageService> logger)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _upstream = upstream ?? throw new ArgumentNullException(nameof(upstream));
         _indexer = indexer ?? throw new ArgumentNullException(nameof(indexer));
+        _licenseFilter = licenseFilter ?? throw new ArgumentNullException(nameof(licenseFilter));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -95,6 +98,32 @@ public class PackageService : IPackageService
     /// <returns>True if the package exists locally or was indexed from an upstream source.</returns>
     private async Task<bool> MirrorAsync(string id, NuGetVersion version, CancellationToken cancellationToken)
     {
+        // Check license for both cached and new packages
+        var blockedReason = await _licenseFilter.GetBlockedReasonOrNullAsync(id, version, cancellationToken);
+        if (blockedReason != null)
+        {
+            // Check if package exists locally - if so, log that we're blocking access to a cached package
+            var existsLocally = await _db.ExistsAsync(id, version, cancellationToken);
+            if (existsLocally)
+            {
+                _logger.LogWarning(
+                    "Package {PackageId} {PackageVersion} is cached locally but has a blocked license. Access will be denied. Reason: {Reason}",
+                    id,
+                    version,
+                    blockedReason);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Package {PackageId} {PackageVersion} has a blocked license and will not be downloaded from upstream. Reason: {Reason}",
+                    id,
+                    version,
+                    blockedReason);
+            }
+            throw new Exceptions.PackageLicenseBlockedException(id, version, blockedReason);
+        }
+
+        // If package already exists locally and license is not blocked, allow access
         if (await _db.ExistsAsync(id, version, cancellationToken))
         {
             return true;
@@ -107,6 +136,7 @@ public class PackageService : IPackageService
 
         try
         {
+
             using var packageStream = await _upstream.DownloadPackageOrNullAsync(id, version, cancellationToken);
             if (packageStream == null)
             {
@@ -131,6 +161,11 @@ public class PackageService : IPackageService
                 result);
 
             return result == PackageIndexingResult.Success;
+        }
+        catch (Exceptions.PackageLicenseBlockedException)
+        {
+            // Re-throw license blocked exceptions so they can be handled properly
+            throw;
         }
         catch (Exception e)
         {

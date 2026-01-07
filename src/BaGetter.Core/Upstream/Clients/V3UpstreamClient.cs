@@ -5,6 +5,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using BaGetter.Protocol;
+using BaGetter.Protocol.Catalog;
+using BaGetter.Protocol.Internal;
 using BaGetter.Protocol.Models;
 using Microsoft.Extensions.Logging;
 using NuGet.Versioning;
@@ -85,6 +87,99 @@ public class V3UpstreamClient : IUpstreamClient
             _logger.LogError(e, "Failed to mirror {PackageId}'s upstream versions", id);
             return new List<NuGetVersion>();
         }
+    }
+
+    public async Task<PackageLicenseInfo> GetLicenseInfoOrNullAsync(string id, NuGetVersion version, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var metadata = await _client.GetPackageMetadataAsync(id, version, cancellationToken);
+
+            var licenseInfo = new PackageLicenseInfo
+            {
+                LicenseUrl = metadata.LicenseUrl
+            };
+
+            // Try to get LicenseExpression from the catalog leaf if CatalogLeafUrl is available
+            if (!string.IsNullOrEmpty(metadata.CatalogLeafUrl))
+            {
+                try
+                {
+                    // CatalogLeafUrl in PackageMetadata points to the catalog leaf directly
+                    // We need to create a catalog client to fetch it
+                    var catalogLeafUrl = metadata.CatalogLeafUrl;
+
+                    // Extract the catalog base URL from the catalog leaf URL
+                    // Example: https://api.nuget.org/v3/catalog0/data/2015.02.01.12.30.45/package.id.1.0.0.json
+                    // Base URL: https://api.nuget.org/v3/catalog0/index.json
+                    var catalogBaseUrl = ExtractCatalogBaseUrl(catalogLeafUrl);
+                    if (!string.IsNullOrEmpty(catalogBaseUrl))
+                    {
+                        // Create a raw catalog client to fetch the catalog leaf
+                        // Note: In a production scenario, we should reuse HttpClient instances
+                        // For now, we create a new one - this is acceptable for the license check
+                        using var httpClient = new System.Net.Http.HttpClient();
+                        var catalogClient = new RawCatalogClient(httpClient, catalogBaseUrl);
+
+                        var catalogLeaf = await catalogClient.GetPackageDetailsLeafAsync(catalogLeafUrl, cancellationToken);
+                        licenseInfo.LicenseExpression = catalogLeaf?.LicenseExpression;
+                    }
+                }
+                catch (Exception e)
+                {
+                    // If we can't get the catalog leaf, log but continue with LicenseUrl only
+                    // This is not a critical failure - we can still block based on LicenseUrl
+                    _logger.LogDebug(
+                        e,
+                        "Could not fetch catalog leaf for {PackageId} {PackageVersion} to get LicenseExpression. URL: {CatalogLeafUrl}",
+                        id,
+                        version,
+                        metadata.CatalogLeafUrl);
+                }
+            }
+
+            return licenseInfo;
+        }
+        catch (PackageNotFoundException)
+        {
+            return null;
+        }
+        catch (Exception e)
+        {
+            _logger.LogError(e, "Failed to get license info for package {PackageId} {PackageVersion}", id, version);
+            return null;
+        }
+    }
+
+    private static string ExtractCatalogBaseUrl(string catalogLeafUrl)
+    {
+        // Extract the catalog base URL from a catalog leaf URL
+        // Example: https://api.nuget.org/v3/catalog0/data/2015.02.01.12.30.45/package.id.1.0.0.json
+        // Base URL: https://api.nuget.org/v3/catalog0/index.json
+        if (string.IsNullOrEmpty(catalogLeafUrl))
+        {
+            return null;
+        }
+
+        try
+        {
+            var uri = new Uri(catalogLeafUrl);
+            var pathParts = uri.AbsolutePath.Split('/');
+
+            // Find the catalog directory (e.g., "catalog0")
+            var catalogIndex = Array.FindIndex(pathParts, p => p.StartsWith("catalog", StringComparison.OrdinalIgnoreCase));
+            if (catalogIndex >= 0 && catalogIndex < pathParts.Length)
+            {
+                var catalogName = pathParts[catalogIndex];
+                return $"{uri.Scheme}://{uri.Authority}/v3/{catalogName}/index.json";
+            }
+        }
+        catch
+        {
+            // If URL parsing fails, return null
+        }
+
+        return null;
     }
 
     private Package ToPackage(PackageMetadata metadata)

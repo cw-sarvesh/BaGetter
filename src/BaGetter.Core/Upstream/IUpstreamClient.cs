@@ -46,4 +46,15 @@ public interface IUpstreamClient
     /// The stream is guaranteed to be seekable if not not null.
     /// </returns>
     Task<Stream> DownloadPackageOrNullAsync(string id, NuGetVersion version, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Get license information for a specific package version. Returns null if the package does not exist.
+    /// </summary>
+    /// <param name="id">The package ID.</param>
+    /// <param name="version">The package version.</param>
+    /// <param name="cancellationToken"></param>
+    /// <returns>
+    /// License information containing LicenseUrl and LicenseExpression, or null if the package cannot be found.
+    /// </returns>
+    Task<PackageLicenseInfo> GetLicenseInfoOrNullAsync(string id, NuGetVersion version, CancellationToken cancellationToken);
 }
